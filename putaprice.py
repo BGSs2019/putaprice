@@ -14,9 +14,12 @@ def find_header(data):
     column_names = data.columns
     for column_name in column_names:
         header = pd.concat([header, data[data[column_name].str.contains("НДС")]])
-    header = header.iloc[0].to_list()
-    header = [str(elem) for elem in header]
-    header = unique_header(header)
+    if header.empty:
+        header = [str(elem) for elem in column_names]
+    else:
+        header = header.iloc[0].to_list()
+        header = [str(elem) for elem in header]
+        header = unique_header(header)
     #print(header)
     return header
 
@@ -32,7 +35,8 @@ def unique_header(header):
 
 #check FEE
 def check_fee(header):
-    fee_flag = 0.8
+    fee_flag = 1.2
+    elem = "err"
     for elem in header:
         if "НДС" in elem:
             if "без НДС" in elem:
@@ -43,7 +47,7 @@ def check_fee(header):
 #function to search price
 def search_price(data, fee_column, fee_value):
     price = 0
-    price = float(data[fee_column].iloc[0])*float(fee_value) 
+    price = float(data[fee_column].iloc[0])/float(fee_value) 
     return price
 
 #search for excel
@@ -53,10 +57,13 @@ list_of_data = []
 for elem in list_of_files:
     if elem.split(".")[-1] >= "xl":
         if elem.split(".")[0] != "target":
-            data = pd.read_excel(elem, dtype = "string")
-            header = find_header(data)
-            data.columns = header
-            list_of_data.append(data)
+            xl = pd.ExcelFile(elem)
+            for sheet in xl.sheet_names:
+                data = pd.read_excel(elem, sheet_name=sheet, header = None, dtype = "string")
+                print(data)
+                header = find_header(data)
+                data.columns = header
+                list_of_data.append(data)
 
 #collect data of target and quantity
 target_data = pd.read_excel("target.xlsx", header = None, dtype="string")
@@ -71,13 +78,14 @@ target_data.columns = ["code","quantity"]
 price_list = [0.0 for elem in target_data["code"]]
 for data in list_of_data:
     fee_value, fee_column = check_fee(data)
-    for pos, code in enumerate(target_data["code"]):
-        code_exists = search_code(code, data)
-        if code_exists.empty != True:
-            if price_list[pos] == 0.0:
-                price = search_price(code_exists, fee_column, fee_value)
-                price_list[pos] = (float(price))
-                print(str(pos) + str(price))
+    if fee_column != "err":
+        for pos, code in enumerate(target_data["code"]):
+            code_exists = search_code(code, data)
+            if code_exists.empty != True:
+                if price_list[pos] == 0.0:
+                    price = search_price(code_exists, fee_column, fee_value)
+                    price_list[pos] = (float(price))
+                    print(str(pos) + str(price))
 
 #write results
 target_data.insert(2, "Price", price_list, True)
